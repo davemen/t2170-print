@@ -1,0 +1,41 @@
+name: T2170Print
+options:
+  bundleIdPrefix: JackWagon
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "2"
+    DEVELOPMENT_TEAM: ""
+targets:
+  T2170Print:
+    type: application
+    platform: iOS
+    sources: [T2170Print]
+    info:
+      path: T2170Print/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: T2170 Print
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSLocalNetworkUsageDescription: Finds and talks to your Epson SureColor T2170 on the local network.
+        NSBonjourServices: [_ipp._tcp, _ipps._tcp, _pdl-datastream._tcp]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: JackWagon.T2170Print
+        CODE_SIGN_STYLE: Automatic
+  T2170PrintTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [T2170PrintTests]
+    dependencies:
+      - target: T2170Print
