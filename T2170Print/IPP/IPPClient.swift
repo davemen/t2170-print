@@ -165,6 +165,9 @@ actor IPPClient {
     let endpointURL: URL
 
     private let session: URLSession
+    /// The endpoint that last answered. Starts as `endpointURL`; moves to HTTPS when the printer
+    /// demands TLS (HTTP 426), which Epson printers do on their plain `ipp://` port.
+    private var activeEndpoint: URL
     private var nextRequestID: UInt32 = 1
     private var version: (UInt8, UInt8) = (2, 0)
 
@@ -172,11 +175,59 @@ actor IPPClient {
     ///
     /// Converts `ipp://` and `ipps://` schemes to `http://` and `https://`,
     /// defaulting to port `631` and path `/ipp/print` when omitted.
-    init(printerURI: URL, session: URLSession = .shared) {
-        self.session = session
+    init(printerURI: URL, session: URLSession? = nil) {
         let (canonicalIPP, httpEndpoint) = Self.normalizeURIs(from: printerURI)
+        self.session = session ?? Self.makeSession(trustedHost: httpEndpoint.host())
         self.printerURI = canonicalIPP
         self.endpointURL = httpEndpoint
+        self.activeEndpoint = httpEndpoint
+    }
+
+    /// The endpoint requests are going to now (differs from `endpointURL` after a TLS fallback).
+    var currentEndpoint: URL { activeEndpoint }
+
+    /// A printer's TLS certificate is self-signed, so a session that talks to one has to accept it,
+    /// for that one host only.
+    private static func makeSession(trustedHost: String?) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration, delegate: PrinterTrustDelegate(host: trustedHost), delegateQueue: nil)
+    }
+
+    private final class PrinterTrustDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
+        let host: String?
+        init(host: String?) { self.host = host }
+        func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
+                        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+            let space = challenge.protectionSpace
+            if space.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+               let trust = space.serverTrust, let host, space.host == host {
+                completionHandler(.useCredential, URLCredential(trust: trust))
+            } else {
+                completionHandler(.performDefaultHandling, nil)
+            }
+        }
+    }
+
+    /// The same endpoint over HTTPS on this port, then on 443.
+    private func tlsCandidates() -> [URL] {
+        guard var components = URLComponents(url: endpointURL, resolvingAgainstBaseURL: false) else { return [] }
+        components.scheme = "https"
+        var urls: [URL] = []
+        if let url = components.url { urls.append(url) }
+        if components.port != 443 {
+            components.port = 443
+            if let url = components.url { urls.append(url) }
+        }
+        return urls
+    }
+
+    /// `ipps://` form of an HTTPS endpoint, for the `printer-uri` attribute.
+    private var activePrinterURI: URL {
+        guard activeEndpoint.scheme == "https",
+              var components = URLComponents(url: activeEndpoint, resolvingAgainstBaseURL: false) else { return printerURI }
+        components.scheme = "ipps"
+        return components.url ?? printerURI
     }
 
     /// Normalizes a printer URI into its canonical IPP URI and HTTP(S) transport URL.
@@ -216,7 +267,7 @@ actor IPPClient {
         var attributes: [IPPAttribute] = [
             .charset("attributes-charset", "utf-8"),
             .naturalLanguage("attributes-natural-language", "en"),
-            .uri("printer-uri", printerURI.absoluteString),
+            .uri("printer-uri", activePrinterURI.absoluteString),
             .name("requesting-user-name", "iPad")
         ]
         attributes.append(contentsOf: extra)
@@ -272,31 +323,46 @@ actor IPPClient {
         return try IPPMessage.decode(responseData)
     }
 
-    /// One HTTP round trip with no interpretation of the reply.
+    /// One HTTP round trip. If a plain-HTTP printer answers 426 (Upgrade Required) or an empty 500,
+    /// URLSession cannot do the RFC 2817 upgrade, so the same request is retried straight over TLS;
+    /// whichever endpoint answers properly is kept for later requests.
     private func exchange(_ message: IPPMessage, documentFile: URL?) async throws -> (Data, URLResponse) {
         var outgoing = message
         outgoing.version = version
         outgoing.requestID = allocateRequestID()
 
-        var request = URLRequest(url: endpointURL)
-        request.httpMethod = "POST"
-        request.setValue("application/ipp", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/ipp", forHTTPHeaderField: "Accept")
-        // An idle timeout, not a total one. A printer slows its reads to the speed of the print head,
-        // so Print-Job gets a long allowance.
-        request.timeoutInterval = outgoing.operationOrStatus == IPPOperation.printJob.rawValue ? 600 : 60
+        let header = try outgoing.encode()
+        let timeout: TimeInterval = outgoing.operationOrStatus == IPPOperation.printJob.rawValue ? 600 : 60
+        let bodyFile = try documentFile.map { try Self.requestBodyFile(header: header, documentFile: $0) }
+        defer { if let bodyFile { try? FileManager.default.removeItem(at: bodyFile) } }
 
-        let responseData: Data
-        let urlResponse: URLResponse
-        if let documentFile {
-            let body = try Self.requestBodyFile(header: outgoing.encode(), documentFile: documentFile)
-            defer { try? FileManager.default.removeItem(at: body) }
-            (responseData, urlResponse) = try await session.upload(for: request, fromFile: body)
-        } else {
-            request.httpBody = try outgoing.encode()
-            (responseData, urlResponse) = try await session.data(for: request)
+        func attempt(_ url: URL) async throws -> (Data, URLResponse) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/ipp", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/ipp", forHTTPHeaderField: "Accept")
+            // An idle timeout, not a total one. A printer slows its reads to the speed of the print head,
+            // so Print-Job gets a long allowance.
+            request.timeoutInterval = timeout
+            if let bodyFile {
+                return try await session.upload(for: request, fromFile: bodyFile)
+            }
+            request.httpBody = header
+            return try await session.data(for: request)
         }
-        return (responseData, urlResponse)
+
+        let first = try await attempt(activeEndpoint)
+        guard activeEndpoint.scheme == "http", let http = first.1 as? HTTPURLResponse,
+              http.statusCode == 426 || (http.statusCode == 500 && first.0.isEmpty) else { return first }
+
+        for url in tlsCandidates() {
+            if let retry = try? await attempt(url), let retryHTTP = retry.1 as? HTTPURLResponse,
+               retryHTTP.statusCode != 426, retryHTTP.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("application/ipp") == true {
+                activeEndpoint = url
+                return retry
+            }
+        }
+        return first
     }
 
     /// Writes the IPP header followed by the document to a temporary file, 1 MB at a time, so a

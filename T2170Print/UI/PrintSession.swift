@@ -272,7 +272,7 @@ final class PrintSession {
         let build = info?["CFBundleVersion"] as? String ?? "?"
         let report = IPPAttributeReport(
             context: .init(appVersion: "\(version) (\(build))", printerURI: client.printerURI.absoluteString,
-                           endpoint: client.endpointURL.absoluteString, discovery: discoveryLines),
+                           endpoint: await client.currentEndpoint.absoluteString, discovery: discoveryLines),
             responses: responses)
         attributeReport = AttributeReportFile(report)
     }
