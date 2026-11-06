@@ -9,7 +9,10 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     TARGETED_DEVICE_FAMILY: "2"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: DWQ9ZN5SGU
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
 targets:
   T2170Print:
     type: application
@@ -19,6 +22,9 @@ targets:
       path: T2170Print/Resources/Info.plist
       properties:
         CFBundleDisplayName: T2170 Print
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UIApplicationSceneManifest:
@@ -32,7 +38,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: JackWagon.T2170Print
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets: [T2170PrintTests]
   T2170PrintTests:
     type: bundle.unit-test
     platform: iOS

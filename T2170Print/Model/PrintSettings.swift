@@ -32,32 +32,51 @@ enum PaperSource: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-/// Roll widths the T2170 (24-inch) takes.
+/// Roll widths from the Mac driver PPD (EPIJ_RoWd), widest first.
 enum RollWidth: String, CaseIterable, Codable, Identifiable {
-    case w24in, a1, w17in, a2, w13in, a3, w8_5in, a4
+    case w24in, w600mm, a1, w22in, b2, w500mm, w18in, w17in, a2
+    case w16in, w400mm, w14in, w13in, w12in, w300mm, a3, w10in
     var id: String { rawValue }
     var label: String {
         switch self {
         case .w24in: "24 in (610 mm)"
+        case .w600mm: "600 mm"
         case .a1: "A1 (594 mm)"
+        case .w22in: "22 in (559 mm)"
+        case .b2: "B2 (515 mm)"
+        case .w500mm: "500 mm"
+        case .w18in: "18 in (457 mm)"
         case .w17in: "17 in (432 mm)"
         case .a2: "A2 (420 mm)"
+        case .w16in: "16 in (406 mm)"
+        case .w400mm: "400 mm"
+        case .w14in: "14 in (356 mm)"
         case .w13in: "13 in (330 mm)"
+        case .w12in: "12 in (305 mm)"
+        case .w300mm: "300 mm"
         case .a3: "A3 (297 mm)"
-        case .w8_5in: "8.5 in (216 mm)"
-        case .a4: "A4 (210 mm)"
+        case .w10in: "10 in (254 mm)"
         }
     }
     var widthMM: Double {
         switch self {
         case .w24in: 609.6
+        case .w600mm: 600
         case .a1: 594
+        case .w22in: 558.8
+        case .b2: 515
+        case .w500mm: 500
+        case .w18in: 457.2
         case .w17in: 431.8
         case .a2: 420
+        case .w16in: 406.4
+        case .w400mm: 400
+        case .w14in: 355.6
         case .w13in: 330.2
+        case .w12in: 304.8
+        case .w300mm: 300
         case .a3: 297
-        case .w8_5in: 215.9
-        case .a4: 210
+        case .w10in: 254
         }
     }
 }
@@ -118,23 +137,29 @@ enum Orientation: String, CaseIterable, Codable, Identifiable {
 
 enum MediaType: String, CaseIterable, Codable, Identifiable {
     case usePrinterSettings
-    case plainPaper, singleweightMatte, doubleweightMatte, enhancedMatte, archivalMatte
-    case photoQualityInkjet, coatedPaperGeneric
+    case plainPaper, plainPaperLineDrawing
+    case singleweightMatte, singleweightMatteLineDrawing, doubleweightMatte, enhancedMatte
+    case ultraPremiumPresentationMatte, presentationPaperMatte
+    case coatedPaperGeneric, coatedPaperGenericLineDrawing
     case premiumGlossyPhoto170, premiumSemiglossPhoto170
     case premiumGlossyPhoto, photoPaperGlossy, premiumSemiglossPhoto, premiumLusterPhoto, photoPaperGeneric
     case tracingPaper, tracingPaperLowDuty, matteFilm
     case enhancedAdhesiveSynthetic, enhancedLowAdhesiveSynthetic, heavyWeightPolyesterBanner
+    case blueprintPaper
     var id: String { rawValue }
     var label: String {
         switch self {
         case .usePrinterSettings: "Use Printer Settings"
         case .plainPaper: "Plain Paper"
+        case .plainPaperLineDrawing: "Plain Paper (line drawing)"
         case .singleweightMatte: "Singleweight Matte"
+        case .singleweightMatteLineDrawing: "Singleweight Matte (line drawing)"
         case .doubleweightMatte: "Doubleweight Matte"
         case .enhancedMatte: "Enhanced Matte"
-        case .archivalMatte: "Archival Matte"
-        case .photoQualityInkjet: "Photo Quality Inkjet"
+        case .ultraPremiumPresentationMatte: "Ultra Premium Presentation Paper Matte"
+        case .presentationPaperMatte: "Presentation Paper Matte"
         case .coatedPaperGeneric: "Coated Paper (Generic)"
+        case .coatedPaperGenericLineDrawing: "Coated Paper (Generic) (line drawing)"
         case .premiumGlossyPhoto170: "Premium Glossy Photo Paper (170)"
         case .premiumSemiglossPhoto170: "Premium Semigloss Photo Paper (170)"
         case .premiumGlossyPhoto: "Premium Glossy Photo Paper"
@@ -148,16 +173,18 @@ enum MediaType: String, CaseIterable, Codable, Identifiable {
         case .enhancedAdhesiveSynthetic: "Enhanced Adhesive Synthetic Paper"
         case .enhancedLowAdhesiveSynthetic: "Enhanced Low Adhesive Synthetic Paper"
         case .heavyWeightPolyesterBanner: "Heavy Weight Polyester Banner"
+        case .blueprintPaper: "Blueprint Paper"
         }
     }
     /// Closest IPP `media-type` keyword (PWG 5101.1). Epson's own names, if the
     /// printer lists them in `media-type-supported`, override these at runtime.
+    /// The PPD lists 24 types (EPIJ_Medi); line-drawing variants are driver-side ink modes.
     var ippMediaType: String? {
         switch self {
         case .usePrinterSettings: nil
-        case .plainPaper: "stationery"
-        case .singleweightMatte, .doubleweightMatte, .enhancedMatte, .archivalMatte: "photographic-matte"
-        case .photoQualityInkjet, .coatedPaperGeneric: "stationery-coated"
+        case .plainPaper, .plainPaperLineDrawing, .blueprintPaper: "stationery"
+        case .singleweightMatte, .singleweightMatteLineDrawing, .doubleweightMatte, .enhancedMatte: "photographic-matte"
+        case .ultraPremiumPresentationMatte, .presentationPaperMatte, .coatedPaperGeneric, .coatedPaperGenericLineDrawing: "stationery-coated"
         case .premiumGlossyPhoto170, .premiumGlossyPhoto, .photoPaperGlossy: "photographic-glossy"
         case .premiumSemiglossPhoto170, .premiumSemiglossPhoto: "photographic-semi-gloss"
         case .premiumLusterPhoto: "photographic-satin"
@@ -272,8 +299,9 @@ enum AutoCut: String, CaseIterable, Codable, Identifiable {
     case off, normalCut
     var id: String { rawValue }
     var label: String { self == .off ? "Off" : "Normal Cut" }
-    /// IPP `finishings` enum: 3 none, 11 trim (PWG 5100.1).
-    var ippFinishing: Int { self == .off ? 3 : 11 }
+    /// IPP `finishings` values in preference order: 3 none; 11 trim, then 60 after pages,
+    /// 62 after copies, 61 after documents, 63 after job. The first the printer lists is sent.
+    var ippFinishings: [Int] { self == .off ? [3] : [11, 60, 62, 61, 63] }
 }
 
 struct AdvancedSettings: Codable, Hashable {
@@ -345,7 +373,6 @@ struct LayoutSettings: Codable, Hashable {
     // Windows-only extras
     var poster: PosterSplit = .off
     var posterOverlapMM: Double = 0
-    var foldedDoubleSide: Bool = false
 }
 
 // MARK: - Paper Handling
@@ -391,16 +418,6 @@ enum ColorMatching: String, CaseIterable, Codable, Identifiable {
     var label: String { self == .colorSync ? "ColorSync" : "EPSON Color Controls" }
 }
 
-// MARK: - Preferences
-
-struct Preferences: Codable, Hashable {
-    var acquirePrinterInfoAutomatically: Bool = true
-    var maintenanceCallNotification: Bool = true
-    var warningNotifications: Bool = true
-    var bidirectionalCommunication: Bool = true
-    var defaultMediaType: MediaType = .usePrinterSettings
-}
-
 // MARK: - Page range
 
 enum PageRange: Codable, Hashable {
@@ -442,15 +459,12 @@ struct PrintSettings: Codable, Hashable {
     var colorMode: ColorMode = .epsonStandardSRGB
     var colorControls = ColorControls()
     var level: QualityLevel = .quality
-    var highSpeed: Bool = true
     var emphasizeThinLines: Bool = false
-    var printPreview: Bool = true
     // Other panes
     var advanced = AdvancedSettings()
     var layout = LayoutSettings()
     var paperHandling = PaperHandlingSettings()
     var colorMatching: ColorMatching = .epsonColorControls
-    var preferences = Preferences()
 
     /// Paper size after any custom override.
     var effectivePaperSize: PaperSize { customPaperSize ?? paperSize }

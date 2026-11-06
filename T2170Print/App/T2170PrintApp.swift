@@ -10,7 +10,9 @@ struct T2170PrintApp: App {
 }
 
 struct ContentView: View {
+    @State private var session = PrintSession()
+
     var body: some View {
-        Text("T2170 Print")
+        PrintPanel(session: session)
     }
 }

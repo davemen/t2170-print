@@ -11,6 +11,6 @@ struct PrintSettingsTests {
     }
 
     @Test func mediaTypeListMatchesMacDriver() {
-        #expect(MediaType.allCases.count == 21)
+        #expect(MediaType.allCases.count == 25)
     }
 }

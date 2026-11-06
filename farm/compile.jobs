@@ -1,1 +1,2 @@
 {"cmd": "./build.sh", "id": "compile", "tag": "xcode"}
+{"cmd": "./test.sh", "id": "test", "tag": "xcode"}
